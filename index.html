@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>💌 婚宴出席回覆 RSVP</title>
+  <!-- Tailwind：快速排版；可換成你喜歡的 CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js：後台圓餅圖 -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    /* 簡單卡片陰影 */
+    .card { box-shadow: 0 10px 25px rgba(0,0,0,.06); }
+  </style>
+</head>
+<body class="bg-pink-50 min-h-screen">
+  <div class="max-w-5xl mx-auto p-6">
+    <!-- 標題區 -->
+    <header class="text-center mb-6">
+      <h1 class="text-3xl font-bold text-pink-700">💌 婚宴出席回覆（RSVP）</h1>
+      <p class="text-gray-600">請填寫您的出席意願與人數，感謝！</p>
+    </header>
+
+    <!-- 前台：RSVP 表單（所有賓客可見） -->
+    <section id="section-form" class="card bg-white rounded-2xl p-6">
+      <form id="rsvpForm" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- 姓名 -->
+        <div class="md:col-span-1">
+          <label class="block text-gray-700 font-medium">姓名 <span class="text-pink-600">*</span></label>
+          <input name="name" type="text" required class="w-full border rounded-lg p-2 mt-1" placeholder="王小明" />
+        </div>
+
+        <!-- 是否出席 -->
+        <div class="md:col-span-1">
+          <label class="block text-gray-700 font-medium">是否出席 <span class="text-pink-600">*</span></label>
+          <select name="attendance" required class="w-full border rounded-lg p-2 mt-1">
+            <option value="">請選擇</option>
+            <option value="yes">會出席</option>
+            <option value="no">不克出席</option>
+          </select>
+        </div>
+
+        <!-- 攜伴人數 -->
+        <div class="md:col-span-1">
+          <label class="block text-gray-700 font-medium">攜伴人數</label>
+          <input name="guests" type="number" min="0" value="0" class="w-full border rounded-lg p-2 mt-1" />
+        </div>
+
+        <!-- 餐點偏好 -->
+        <div class="md:col-span-1">
+          <label class="block text-gray-700 font-medium">餐點偏好</label>
+          <select name="meal" class="w-full border rounded-lg p-2 mt-1">
+            <option value="none">一般</option>
+            <option value="veg">素食</option>
+            <option value="child">兒童餐</option>
+          </select>
+        </div>
+
+        <!-- 過敏 -->
+        <div class="md:col-span-2">
+          <label class="block text-gray-700 font-medium">食物過敏（選填）</label>
+          <input name="allergies" type="text" class="w-full border rounded-lg p-2 mt-1" placeholder="例：花生、海鮮" />
+        </div>
+
+        <!-- 備註 -->
+        <div class="md:col-span-2">
+          <label class="block text-gray-700 font-medium">備註（選填）</label>
+          <textarea name="note" rows="3" class="w-full border rounded-lg p-2 mt-1" placeholder="想對新人說的話…"></textarea>
+        </div>
+
+        <!-- 送出 -->
+        <div class="md:col-span-2 flex items-center gap-3">
+          <button type="submit" class="flex-1 bg-pink-600 text-white rounded-lg py-2 hover:bg-pink-700">送出回覆</button>
+          <span id="formStatus" class="text-sm text-gray-500"></span>
+        </div>
+      </form>
+    </section>
+
+    <!-- 後台：只有管理者（帶正確 admin_key）可見 -->
+    <section id="section-admin" class="hidden mt-8 grid grid-cols-1 gap-6">
+      <!-- 統計卡 + 圖表 -->
+      <div class="card bg-white rounded-2xl p-6">
+        <h2 class="text-xl font-bold mb-2">📊 即時統計</h2>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          <div class="bg-pink-50 rounded-xl p-4 text-center">
+            <div class="text-sm text-gray-500">出席戶數</div>
+            <div id="statYes" class="text-2xl font-bold">0</div>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-4 text-center">
+            <div class="text-sm text-gray-500">不克出席戶數</div>
+            <div id="statNo" class="text-2xl font-bold">0</div>
+          </div>
+          <div class="bg-pink-50 rounded-xl p-4 text-center">
+            <div class="text-sm text-gray-500">預估到場總人數</div>
+            <div id="statHeads" class="text-2xl font-bold">0</div>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-4 text-center">
+            <div class="text-sm text-gray-500">素食份數</div>
+            <div id="statVeg" class="text-2xl font-bold">0</div>
+          </div>
+        </div>
+        <canvas id="statsChart" height="120"></canvas>
+        <div class="text-right mt-2 flex gap-2 justify-end">
+          <button id="btnRefresh" class="px-3 py-2 bg-pink-600 text-white rounded-lg">重新整理</button>
+          <button id="btnExport" class="px-3 py-2 bg-gray-800 text-white rounded-lg">匯出 CSV</button>
+        </div>
+      </div>
+
+      <!-- 名單明細 -->
+      <div class="card bg-white rounded-2xl p-6">
+        <h3 class="text-lg font-bold mb-3">明細列表（僅管理者）</h3>
+        <div class="overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-left text-gray-600">
+                <th class="p-2">時間</th>
+                <th class="p-2">姓名</th>
+                <th class="p-2">出席</th>
+                <th class="p-2">攜伴</th>
+                <th class="p-2">餐點</th>
+                <th class="p-2">過敏</th>
+                <th class="p-2">備註</th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 只有管理者可見：原始碼複製 & 下載工具 -->
+      <div class="card bg-white rounded-2xl p-6">
+        <h3 class="text-lg font-bold mb-3">開發者工具（僅管理者可見）</h3>
+        <div class="flex flex-wrap gap-3">
+          <button id="btnCopy" class="px-3 py-2 bg-gray-700 text-white rounded-lg">複製目前頁面 HTML</button>
+          <button id="btnDownload" class="px-3 py-2 bg-gray-700 text-white rounded-lg">下載 index.html</button>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">
+          以上會以目前頁面的 HTML 為準（含你修改後的 CONFIG）。下載的檔名預設為 index.html。
+        </p>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    /* ------------------------------------------------------------
+     * ① 可調整設定（CONFIG）：請務必修改為你的設定值
+     * ------------------------------------------------------------ */
+    const CONFIG = {
+      apiBase: "https://script.google.com/macros/s/AKfycbx9XJ3FdartnPOnKo8FfxOwBZU86f066Qh-EDfhTj2Jz5HakJdk0WVOaWZ6TomgvVTYVg/exec", // ← 這裡改成你部署後取得的 GAS Web App URL（以 /exec 結尾）
+      adminKey: "123456" // ← 這裡改成你自己設定的密鑰（例如 MyWedding2025），要與 GAS 端 ADMIN_KEY 完全一致
+    };
+
+    /* ------------------------------------------------------------
+     * ② 前台：送出 RSVP 表單
+     * ------------------------------------------------------------ */
+    const form = document.getElementById('rsvpForm');           // 取得表單元素
+    const formStatus = document.getElementById('formStatus');   // 顯示送出狀態的 span
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();                                       // 阻止原生提交行為
+      formStatus.textContent = '送出中…';
+
+      const fd = new FormData(form);                            // 取用戶輸入
+      const payload = {
+        name: (fd.get('name')||'').trim(),
+        attendance: fd.get('attendance'),
+        guests: Number(fd.get('guests')||0),
+        meal: fd.get('meal')||'none',
+        allergies: (fd.get('allergies')||'').trim(),
+        note: (fd.get('note')||'').trim()
+      };
+
+      if(!payload.name || !payload.attendance){                 // 前端驗證：必填
+        formStatus.textContent = '請完整填寫必填欄位。';
+        return;
+      }
+
+      try{
+        const res = await fetch(CONFIG.apiBase, {               // 呼叫 GAS Web App
+          method: 'POST',                                       // 使用 POST 動作
+          headers: { 'Content-Type': 'application/json' },      // JSON 格式
+          body: JSON.stringify({ action:'submit', data: payload })
+        });
+        const json = await res.json();                          // 解析 JSON 回覆
+        if(json.ok){                                            // 成功回應
+          form.reset();                                         // 清空表單
+          formStatus.textContent = '已收到，謝謝您的回覆！';       // 告知成功
+          setTimeout(()=>formStatus.textContent='',2500);       // 2.5 秒後清除訊息
+        }else{
+          formStatus.textContent = '送出失敗，請稍後再試。';        // 失敗訊息
+        }
+      }catch(err){
+        console.error(err);
+        formStatus.textContent = '連線發生問題。';
+      }
+    });
+
+    /* ------------------------------------------------------------
+     * ③ 後台：只有帶對的 admin_key 參數才會顯示
+     * ------------------------------------------------------------ */
+    const params = new URLSearchParams(location.search);        // 解析網址參數
+    const adminKey = params.get('admin_key');                   // 取得 admin_key
+    const isAdmin = adminKey && adminKey === CONFIG.adminKey;   // 檢查是否為管理者
+
+    if(isAdmin){                                                // 如果是管理者
+      document.getElementById('section-admin').classList.remove('hidden'); // 顯示後台
+      initAdmin();                                              // 初始化後台
+    }
+
+    /* ------------------------------------------------------------
+     * ④ 後台功能：載入統計、圖表、明細、匯出與工具
+     * ------------------------------------------------------------ */
+    let chart;                                                  // Chart.js 物件（重建時可先 destroy）
+    async function initAdmin(){
+      await refreshStats();                                     // 先載入一次
+      document.getElementById('btnRefresh').addEventListener('click', refreshStats);
+      document.getElementById('btnExport').addEventListener('click', exportCSV);
+      document.getElementById('btnCopy').addEventListener('click', copyHTML);
+      document.getElementById('btnDownload').addEventListener('click', downloadHTML);
+      setInterval(refreshStats, 20000);                         // 每 20 秒自動更新
+    }
+
+    // 從 GAS 取統計與明細
+    async function refreshStats(){
+      try{
+        const url = `${CONFIG.apiBase}?action=stats&admin_key=${encodeURIComponent(adminKey)}`;
+        const res = await fetch(url);
+        const json = await res.json();
+        if(!json.ok) return;
+
+        const { summary, rows } = json;
+
+        // 更新四個數字卡
+        document.getElementById('statYes').textContent = summary.yesCount;
+        document.getElementById('statNo').textContent = summary.noCount;
+        document.getElementById('statHeads').textContent = summary.expectedHeads;
+        document.getElementById('statVeg').textContent = summary.vegCount;
+
+        // 建/重建圓餅圖
+        const data = {
+          labels: ['會出席','不克出席'],
+          datasets: [{ data: [summary.yesCount, summary.noCount] }]
+        };
+        const ctx = document.getElementById('statsChart').getContext('2d');
+        if(chart){ chart.destroy(); }
+        chart = new Chart(ctx, { type:'doughnut', data });
+
+        // 明細表
+        const tbody = document.getElementById('tbody');
+        tbody.innerHTML = rows.map(r => `
+          <tr class="border-t">
+            <td class="p-2">${escapeHTML(r.timestamp)}</td>
+            <td class="p-2">${escapeHTML(r.name)}</td>
+            <td class="p-2">${r.attendance==='yes'?'出席':'不克'}</td>
+            <td class="p-2">${Number(r.guests)||0}</td>
+            <td class="p-2">${r.meal==='veg'?'素食':(r.meal==='child'?'兒童':'一般')}</td>
+            <td class="p-2">${escapeHTML(r.allergies||'')}</td>
+            <td class="p-2">${escapeHTML(r.note||'')}</td>
+          </tr>`).join('');
+      }catch(err){
+        console.error(err);
+      }
+    }
+
+    // 匯出 CSV（由 GAS 產出）
+    function exportCSV(){
+      const url = `${CONFIG.apiBase}?action=export&admin_key=${encodeURIComponent(adminKey)}`;
+      window.open(url, '_blank');                               // 另開視窗下載
+    }
+
+    // 工具：複製目前 HTML 原始碼到剪貼簿
+    async function copyHTML(){
+      const html = '<!DOCTYPE html>\\n' + document.documentElement.outerHTML; // 取整份頁面
+      try{
+        await navigator.clipboard.writeText(html);
+        alert('已複製目前頁面 HTML 到剪貼簿！');
+      }catch(e){
+        alert('瀏覽器阻擋複製，請手動選取複製。');
+      }
+    }
+
+    // 工具：下載目前 HTML 原始碼成 index.html
+    function downloadHTML(){
+      const html = '<!DOCTYPE html>\\n' + document.documentElement.outerHTML; // 取整份頁面
+      const blob = new Blob([html], {type: 'text/html;charset=utf-8'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'index.html';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    // 簡易跳脫 HTML（避免 XSS）
+    function escapeHTML(s){
+      return (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    }
+  </script>
+
+  <!-- 使用說明（可刪）
+  1) 先完成 GAS 後端（見 Code.gs），部署為 Web App，取得 /exec 的網址。
+  2) 回到上方 CONFIG，把 apiBase 換成你的 Web App URL，把 adminKey 換成你自訂密鑰（同 GAS 的 ADMIN_KEY）。
+  3) 將本檔命名為 index.html，上傳到 GitHub Pages 或任何靜態主機。
+  4) 賓客使用前台網址（不帶 admin_key）；管理者用相同網址 + ?admin_key=你的密鑰 查看後台。
+  -->
+</body>
+</html>
